@@ -1,5 +1,4 @@
 import os
-import json
 from typing import Tuple, List, Dict, Any
 
 import requests
@@ -166,20 +165,36 @@ if show_p24h:
 if show_p1h:
     add_mrms_wms_layer(m, "mrms_p1h", "MRMS 1-hour Precip", opacity=opacity)
 
-# Alerts polygons/lines
-tooltip = GeoJsonTooltip(
-    fields=["headline", "areaDesc", "severity", "certainty", "effective", "expires"],
-    aliases=["Headline", "Areas", "Severity", "Certainty", "Effective", "Expires"],
-    sticky=True,
-    localize=True,
-)
+# ---- Safe tooltip creation (avoids AssertionError when features == []) ----
+tooltip = None
+if features:
+    sample_props = (features[0].get("properties") or {})
+    desired_fields = ["headline", "areaDesc", "severity", "certainty", "effective", "expires"]
+    fields = [f for f in desired_fields if f in sample_props]
+    if fields:  # only attach if at least one field exists
+        aliases_map = {
+            "headline": "Headline",
+            "areaDesc": "Areas",
+            "severity": "Severity",
+            "certainty": "Certainty",
+            "effective": "Effective",
+            "expires": "Expires",
+        }
+        aliases = [aliases_map[f] for f in fields]
+        tooltip = GeoJsonTooltip(
+            fields=fields,
+            aliases=aliases,
+            sticky=True,
+            localize=True,
+        )
 
+# Alerts polygons/lines (works even if features == [])
 GeoJson(
     {"type": "FeatureCollection", "features": features},
     name="Active Flash Flood Warnings (NWS)",
     style_function=style_fn,
     highlight_function=highlight_fn,
-    tooltip=tooltip,
+    tooltip=tooltip,  # may be None when no features
 ).add_to(m)
 
 LayerControl(collapsed=False).add_to(m)
@@ -201,7 +216,7 @@ with col_map:
 with col_panel:
     st.subheader("Active Warnings (filtered)")
     if not features:
-        st.info("No active Flash Flood Warnings match the current filter.")
+        st.info("No active Flash Flood Warnings match the current filter. Try clearing county/state.")
     else:
         for f in features:
             p = f.get("properties", {})
